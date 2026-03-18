@@ -70,12 +70,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ jobId: job.id }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Invalid input', details: error.issues }, { status: 422 })
+      const messages = error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ')
+      return NextResponse.json({ error: `Validation failed: ${messages}` }, { status: 422 })
     }
+    const message =
+      error instanceof Error
+        ? error.message
+        : error && typeof error === 'object' && 'message' in error
+        ? String((error as Record<string, unknown>).message)
+        : JSON.stringify(error)
     console.error('Create job error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create job' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

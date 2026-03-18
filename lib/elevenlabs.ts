@@ -45,14 +45,6 @@ export async function generateMusic(style: string, jobId: string): Promise<strin
     throw new Error(`ElevenLabs Music failed: ${res.status} ${err}`)
   }
 
-  const { audio_url } = await res.json()
-
-  if (audio_url) {
-    // API returned a URL — download and re-upload
-    return downloadAndUpload(audio_url, `jobs/${jobId}/music.mp3`, 'audio/mpeg')
-  }
-
-  // API returned raw audio bytes
   const buffer = Buffer.from(await res.arrayBuffer())
   return uploadBuffer(buffer, `jobs/${jobId}/music.mp3`, 'audio/mpeg')
 }

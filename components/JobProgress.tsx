@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { CheckCircle2, Circle, Loader2, XCircle } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import type { Job, JobStatus } from '@/types'
 
 interface Step {
@@ -33,6 +33,22 @@ const STATUS_ORDER: JobStatus[] = [
   'completed',
 ]
 
+// Rough remaining-time estimates (seconds) per status
+const ETA_SECONDS: Partial<Record<JobStatus, number>> = {
+  uploading: 20,
+  generating_voice: 40,
+  generating_music: 45,
+  generating_clips: 5 * 60,  // parallel = ~5 min total
+  generating_twin: 2.5 * 60,
+  assembling: 90,
+}
+
+function formatEta(seconds: number): string {
+  if (seconds < 60) return `~${Math.ceil(seconds)}s`
+  const mins = Math.ceil(seconds / 60)
+  return `~${mins} min`
+}
+
 function stepState(stepId: JobStatus, currentStatus: JobStatus): 'done' | 'active' | 'pending' {
   if (currentStatus === 'failed') return 'pending'
   const current = STATUS_ORDER.indexOf(currentStatus)
@@ -48,7 +64,30 @@ interface Props {
 
 export default function JobProgress({ initialJob }: Props) {
   const [job, setJob] = useState<Job>(initialJob)
+  const [elapsed, setElapsed] = useState(0) // seconds elapsed in current step
+  const stepStartRef = useRef<number>(Date.now())
 
+  // Reset elapsed timer when status changes
+  useEffect(() => {
+    stepStartRef.current = Date.now()
+    setElapsed(0)
+  }, [job.status])
+
+  // Tick every second while active
+  useEffect(() => {
+    const activeStatuses: JobStatus[] = [
+      'uploading', 'generating_voice', 'generating_music',
+      'generating_clips', 'generating_twin', 'assembling',
+    ]
+    if (!activeStatuses.includes(job.status)) return
+
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - stepStartRef.current) / 1000))
+    }, 1000)
+    return () => clearInterval(id)
+  }, [job.status])
+
+  // Supabase Realtime subscription
   useEffect(() => {
     const supabase = createClient()
     const channel = supabase
@@ -65,44 +104,71 @@ export default function JobProgress({ initialJob }: Props) {
 
   const visibleSteps = PIPELINE_STEPS.filter((s) => !s.condition || s.condition(job))
 
+  // Compute ETA for current step
+  const etaTotal = ETA_SECONDS[job.status]
+  const etaRemaining = etaTotal ? Math.max(0, etaTotal - elapsed) : null
+
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Progress bar */}
       <div>
-        <div className="flex justify-between text-xs text-gray-500 mb-1">
-          <span>{job.step_label ?? 'Processing...'}</span>
-          <span>{job.progress}%</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: '0.75rem', marginBottom: 6 }}>
+          <span style={{ color: 'var(--text-muted)', flex: 1 }}>{job.step_label ?? 'Processing...'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {etaRemaining !== null && job.status !== 'completed' && (
+              <span style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>
+                {etaRemaining > 0 ? `${formatEta(etaRemaining)} remaining` : 'almost done...'}
+              </span>
+            )}
+            <span style={{ color: 'var(--blue)', fontWeight: 600, minWidth: 32, textAlign: 'right' }}>
+              {job.progress}%
+            </span>
+          </div>
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-blue-500 rounded-full transition-all duration-700"
-            style={{ width: `${job.progress}%` }}
-          />
+        <div className="progress-track">
+          <div className="progress-fill" style={{ width: `${job.progress}%` }} />
         </div>
+        {/* Elapsed time for current step */}
+        {elapsed > 0 && job.status !== 'completed' && job.status !== 'failed' && (
+          <p style={{ fontSize: '0.68rem', color: 'var(--text-dim)', marginTop: 4, margin: 0 }}>
+            {formatElapsed(elapsed)} on this step
+          </p>
+        )}
       </div>
 
       {/* Step timeline */}
-      <div className="space-y-3">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {visibleSteps.map((step) => {
           const state = stepState(step.id, job.status)
           return (
-            <div key={step.id} className="flex items-center gap-3">
-              {state === 'done' && <CheckCircle2 size={18} className="text-green-500 shrink-0" />}
-              {state === 'active' && job.status !== 'failed' && (
-                <Loader2 size={18} className="text-blue-500 animate-spin shrink-0" />
-              )}
-              {state === 'pending' && <Circle size={18} className="text-gray-300 shrink-0" />}
-              <span
-                className={`text-sm ${
-                  state === 'done'
-                    ? 'text-gray-800'
-                    : state === 'active'
-                    ? 'text-blue-700 font-medium'
-                    : 'text-gray-400'
-                }`}
-              >
-                {step.label}
-              </span>
+            <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ flexShrink: 0, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {state === 'done' && (
+                  <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'rgba(16,185,129,0.15)', border: '1.5px solid var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: '0.55rem', color: 'var(--success)', fontWeight: 700 }}>✓</span>
+                  </div>
+                )}
+                {state === 'active' && job.status !== 'failed' && (
+                  <Loader2 size={18} className="animate-spin" style={{ color: 'var(--blue)' }} />
+                )}
+                {(state === 'pending' || (state === 'active' && job.status === 'failed')) && (
+                  <div style={{ width: 18, height: 18, borderRadius: '50%', border: '1.5px solid var(--border)' }} />
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flex: 1 }}>
+                <span style={{
+                  fontSize: '0.875rem',
+                  color: state === 'done' ? 'var(--text)' : state === 'active' ? 'var(--blue)' : 'var(--text-dim)',
+                  fontWeight: state === 'active' ? 500 : 400,
+                }}>
+                  {step.label}
+                </span>
+                {state === 'active' && ETA_SECONDS[step.id] && (
+                  <span style={{ fontSize: '0.68rem', color: 'var(--text-dim)' }}>
+                    {`est. ${formatEta(ETA_SECONDS[step.id]!)}`}
+                  </span>
+                )}
+              </div>
             </div>
           )
         })}
@@ -110,14 +176,21 @@ export default function JobProgress({ initialJob }: Props) {
 
       {/* Error state */}
       {job.status === 'failed' && (
-        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-          <XCircle size={16} className="shrink-0 mt-0.5" />
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, fontSize: '0.875rem', color: 'var(--error)' }}>
+          <span style={{ flexShrink: 0 }}>✕</span>
           <div>
-            <p className="font-medium">Pipeline failed</p>
-            {job.error_message && <p className="text-xs mt-0.5 opacity-80">{job.error_message}</p>}
+            <p style={{ fontWeight: 600, margin: 0 }}>Pipeline failed</p>
+            {job.error_message && <p style={{ fontSize: '0.75rem', marginTop: 4, opacity: 0.8, margin: 0 }}>{job.error_message}</p>}
           </div>
         </div>
       )}
     </div>
   )
+}
+
+function formatElapsed(s: number): string {
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  const rem = s % 60
+  return rem > 0 ? `${m}m ${rem}s` : `${m}m`
 }

@@ -50,11 +50,7 @@ async function callFfmpegWorker(payload: AssembleRequest): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export const processJob = inngest.createFunction(
-  {
-    id: 'process-yacht-video',
-    retries: 2,
-  },
-  { event: 'yacht/job.started' },
+  { id: 'process-yacht-video', retries: 2, triggers: [{ event: 'yacht/job.started' }] },
   async ({ event, step }) => {
     const { jobId } = event.data as { jobId: string }
 
@@ -90,67 +86,102 @@ export const processJob = inngest.createFunction(
       return url
     })
 
-    // ── 3. Generate video clips (Runway ML) ───────────────────────────────
+    // ── 3. Generate video clips (Runway ML — all in parallel) ─────────────
     await step.run('set-status-clips', () =>
       updateJob(jobId, {
         status: 'generating_clips',
-        step_label: 'Creating video clips...',
+        step_label: 'Starting clip generation...',
         progress: 35,
       })
     )
 
-    const job = await step.run('fetch-job', () => getJob(jobId))
-    const clipCount = job.clip_count
-    const imageUrls = job.image_urls.slice(0, clipCount)
-    const clipUrls: string[] = []
+    const job = await step.run('fetch-job-for-clips', () => getJob(jobId))
+    const imageUrls = job.image_urls.slice(0, job.clip_count)
 
-    for (let i = 0; i < imageUrls.length; i++) {
-      // Start Runway task
-      const runwayTaskId = await step.run(`start-clip-${i}`, () =>
-        startRunwayClip(imageUrls[i])
-      )
-
-      // Poll until done (Inngest persists state across step.sleep calls)
-      let clipStatus = 'QUEUED'
-      let outputUrl: string | undefined
-      let attempt = 0
-
-      while (clipStatus === 'QUEUED' || clipStatus === 'RUNNING') {
-        await step.sleep(`wait-clip-${i}-attempt-${attempt}`, '20s')
-        const result = await step.run(`check-clip-${i}-attempt-${attempt}`, () =>
-          checkRunwayClip(runwayTaskId)
+    // Re-upload listing images to Supabase so Runway can access them
+    const uploadedImageUrls = await Promise.all(
+      imageUrls.map((url, i) =>
+        step.run(`upload-image-${i}`, () =>
+          downloadAndUpload(url, `jobs/${jobId}/image-${i}.jpg`, 'image/jpeg')
         )
-        clipStatus = result.status
-        outputUrl = result.outputUrl
-        attempt++
+      )
+    )
 
-        if (clipStatus === 'FAILED') {
-          throw new Error(`Runway clip ${i + 1} failed`)
-        }
-        if (attempt > 30) {
-          throw new Error(`Runway clip ${i + 1} timed out`)
-        }
-      }
+    // Start ALL Runway tasks simultaneously
+    const runwayTaskIds = await Promise.all(
+      uploadedImageUrls.map((url, i) =>
+        step.run(`start-clip-${i}`, () => startRunwayClip(url))
+      )
+    )
 
-      // Download Runway output and store in Supabase
-      const storedUrl = await step.run(`store-clip-${i}`, () =>
-        downloadAndUpload(outputUrl!, `jobs/${jobId}/clip-${i}.mp4`, 'video/mp4')
+    await step.run('clips-started', () =>
+      updateJob(jobId, {
+        step_label: `All ${imageUrls.length} clips started in parallel...`,
+        progress: 38,
+      })
+    )
+
+    // Poll all clips together every 20s — track each as it finishes
+    const clipOutputUrls: Record<number, string> = {}
+    const MAX_POLL_ATTEMPTS = 20 // 20 × 20s ≈ 7 min max
+
+    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+      if (Object.keys(clipOutputUrls).length >= imageUrls.length) break
+
+      await step.sleep(`clips-poll-${attempt}`, '20s')
+
+      // Check all still-pending clips in parallel
+      await Promise.all(
+        runwayTaskIds.map(async (taskId, i) => {
+          if (clipOutputUrls[i] !== undefined) return // already done
+          const result = await step.run(`check-clip-${i}-${attempt}`, () =>
+            checkRunwayClip(taskId)
+          )
+          if (result.status === 'SUCCEEDED') {
+            clipOutputUrls[i] = result.outputUrl!
+          } else if (result.status === 'FAILED') {
+            throw new Error(`Runway clip ${i + 1} failed: ${result.failureReason ?? 'unknown'}`)
+          }
+        })
       )
 
-      clipUrls.push(storedUrl)
+      const doneCount = Object.keys(clipOutputUrls).length
+      const remaining = imageUrls.length - doneCount
 
-      await step.run(`save-clip-progress-${i}`, () =>
+      await step.run(`clips-progress-${attempt}`, () =>
         updateJob(jobId, {
-          clip_urls: clipUrls,
-          progress: 35 + Math.round(((i + 1) / clipCount) * 35),
+          progress: 35 + Math.round((doneCount / imageUrls.length) * 30),
+          step_label:
+            doneCount === imageUrls.length
+              ? 'All clips complete — saving...'
+              : remaining === 1
+              ? `${doneCount}/${imageUrls.length} clips done — waiting on last one...`
+              : `${doneCount}/${imageUrls.length} clips done, ${remaining} still running...`,
         })
       )
     }
 
+    if (Object.keys(clipOutputUrls).length < imageUrls.length) {
+      throw new Error('Clip generation timed out after 7 minutes')
+    }
+
+    // Download all Runway outputs → Supabase in parallel
+    const storedClipUrls = await Promise.all(
+      imageUrls.map((_, i) =>
+        step.run(`store-clip-${i}`, () =>
+          downloadAndUpload(clipOutputUrls[i], `jobs/${jobId}/clip-${i}.mp4`, 'video/mp4')
+        )
+      )
+    )
+
+    await step.run('save-clips', () =>
+      updateJob(jobId, { clip_urls: storedClipUrls, progress: 68 })
+    )
+
     // ── 4. Generate AI twin (optional) ────────────────────────────────────
     const aiTwinUrl = await step.run('generate-ai-twin', async () => {
-      const job = await getJob(jobId)
-      if (!job.use_ai_twin || !job.avatar_url) return null
+      const freshJob = await getJob(jobId)
+      if (!freshJob.use_ai_twin || !freshJob.avatar_url) return null
 
       await updateJob(jobId, {
         status: 'generating_twin',
@@ -158,7 +189,7 @@ export const processJob = inngest.createFunction(
         progress: 72,
       })
 
-      const url = await generateAiTwin(job.avatar_url, voiceoverUrl, job.caption_template_id)
+      const url = await generateAiTwin(freshJob.avatar_url, voiceoverUrl, freshJob.caption_template_id)
       await updateJob(jobId, { ai_twin_url: url })
       return url
     })
@@ -173,17 +204,17 @@ export const processJob = inngest.createFunction(
     )
 
     const finalVideoUrl = await step.run('assemble-video', async () => {
-      const job = await getJob(jobId)
+      const freshJob = await getJob(jobId)
       return callFfmpegWorker({
         jobId,
-        clips: clipUrls,
+        clips: storedClipUrls,
         voiceoverUrl,
         musicUrl: musicUrl ?? null,
-        logoUrl: job.logo_url ?? null,
+        logoUrl: freshJob.logo_url ?? null,
         aiTwinUrl: aiTwinUrl ?? null,
-        vesselLocation: job.vessel_location ?? null,
-        fullName: job.full_name,
-        companyName: job.company_name ?? null,
+        vesselLocation: freshJob.vessel_location ?? null,
+        fullName: freshJob.full_name,
+        companyName: freshJob.company_name ?? null,
       })
     })
 

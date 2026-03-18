@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { Plus } from 'lucide-react'
 import JobCard from '@/components/JobCard'
 import type { Job } from '@/types'
 
@@ -14,35 +13,35 @@ export default async function JobsPage() {
   const jobs = await getJobs()
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
+    <div style={{ minHeight: '100vh', padding: '40px 24px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 32 }}>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Yacht Videos</h1>
-            <p className="text-sm text-gray-500 mt-0.5">{jobs.length} job{jobs.length !== 1 ? 's' : ''}</p>
+            <p className="section-label" style={{ marginBottom: 6 }}>Dashboard</p>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+              Yacht Videos
+            </h1>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: 4 }}>
+              {jobs.length} job{jobs.length !== 1 ? 's' : ''} generated
+            </p>
           </div>
-          <Link
-            href="/new"
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors text-sm"
-          >
-            <Plus size={16} />
-            New Video
+          <Link href="/new" className="btn-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            + New Video
           </Link>
         </div>
 
         {jobs.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
-            <p className="text-gray-400 text-sm mb-4">No videos yet</p>
-            <Link
-              href="/new"
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-5 rounded-lg transition-colors text-sm"
-            >
-              <Plus size={16} />
-              Generate your first video
+          <div className="card" style={{ padding: 64, textAlign: 'center' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--blue-dim)', border: '1px solid rgba(46,163,242,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <span style={{ fontSize: '1.5rem' }}>🎬</span>
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: 20 }}>No videos yet. Generate your first yacht marketing video.</p>
+            <Link href="/new" className="btn-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              + Generate First Video
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
             {jobs.map((job) => (
               <JobCard key={job.id} job={job} />
             ))}

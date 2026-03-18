@@ -1,0 +1,7 @@
+[build]
+builder = "nixpacks"
+buildCommand = "cd worker && npm install && npm run build"
+
+[deploy]
+startCommand = "cd worker && npm start"
+restartPolicyType = "on_failure"

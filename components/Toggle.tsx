@@ -9,24 +9,42 @@ interface ToggleProps {
 
 export default function Toggle({ enabled, onChange, label, description }: ToggleProps) {
   return (
-    <div className="flex items-center justify-between">
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
       <div>
-        <p className="text-sm font-medium text-gray-900">{label}</p>
-        {description && <p className="text-xs text-gray-500">{description}</p>}
+        <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', margin: 0 }}>{label}</p>
+        {description && <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2, margin: 0 }}>{description}</p>}
       </div>
       <button
         type="button"
         onClick={() => onChange(!enabled)}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-          enabled ? 'bg-blue-600' : 'bg-gray-200'
-        }`}
+        style={{
+          position: 'relative',
+          display: 'inline-flex',
+          height: 24,
+          width: 44,
+          alignItems: 'center',
+          borderRadius: 12,
+          border: 'none',
+          cursor: 'pointer',
+          transition: 'background 0.2s',
+          background: enabled ? 'var(--blue)' : 'var(--surface-2)',
+          boxShadow: enabled ? '0 0 10px rgba(46,163,242,0.3)' : 'none',
+          outline: 'none',
+        }}
         role="switch"
         aria-checked={enabled}
       >
         <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-            enabled ? 'translate-x-6' : 'translate-x-1'
-          }`}
+          style={{
+            display: 'inline-block',
+            height: 16,
+            width: 16,
+            borderRadius: '50%',
+            background: '#fff',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+            transition: 'transform 0.2s',
+            transform: enabled ? 'translateX(24px)' : 'translateX(4px)',
+          }}
         />
       </button>
     </div>

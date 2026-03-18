@@ -1,6 +1,5 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, CheckCircle2 } from 'lucide-react'
 import JobProgress from '@/components/JobProgress'
 import VideoResult from '@/components/VideoResult'
 import type { Job } from '@/types'
@@ -18,38 +17,49 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   if (!job) notFound()
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-xl mx-auto px-4 py-8">
+    <div style={{ minHeight: '100vh', padding: '40px 24px' }}>
+      <div style={{ maxWidth: 600, margin: '0 auto' }}>
         {/* Header */}
-        <div className="mb-6">
+        <div style={{ marginBottom: 28 }}>
           <Link
             href="/jobs"
-            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 12 }}
           >
-            <ChevronLeft size={14} />
-            All jobs
+            ← All jobs
           </Link>
-          <div className="flex items-start justify-between mt-2">
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{job.full_name}</h1>
+              <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+                {job.full_name}
+              </h1>
               {job.vessel_location && (
-                <p className="text-sm text-gray-500">{job.vessel_location}</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: 4 }}>{job.vessel_location}</p>
               )}
             </div>
-            <div className="flex gap-2 text-xs text-gray-400 mt-1">
-              {job.clip_count} clips
-              {job.use_ai_twin && <span>· AI twin</span>}
-              {job.use_music && <span>· Music</span>}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', marginTop: 4 }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 8px' }}>
+                {job.clip_count} clips
+              </span>
+              {job.use_ai_twin && (
+                <span style={{ fontSize: '0.7rem', color: 'var(--blue)', background: 'var(--blue-dim)', border: '1px solid rgba(46,163,242,0.2)', borderRadius: 6, padding: '3px 8px' }}>
+                  AI Twin
+                </span>
+              )}
+              {job.use_music && (
+                <span style={{ fontSize: '0.7rem', color: 'var(--blue)', background: 'var(--blue-dim)', border: '1px solid rgba(46,163,242,0.2)', borderRadius: 6, padding: '3px 8px' }}>
+                  Music
+                </span>
+              )}
             </div>
           </div>
         </div>
 
         {/* Complete */}
         {job.status === 'completed' && job.final_video_url ? (
-          <div className="space-y-6">
-            <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-xl p-3 text-sm font-medium">
-              <CheckCircle2 size={18} />
-              Video ready! Check your email for the download link.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 12, padding: '12px 16px', fontSize: '0.875rem', color: 'var(--success)', fontWeight: 500 }}>
+              <span>✓</span>
+              Video ready — download below
             </div>
             <VideoResult
               videoUrl={job.final_video_url}
@@ -58,8 +68,11 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             />
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Generating your video...</h2>
+          <div className="card" style={{ padding: 28 }}>
+            <div className="accent-bar" />
+            <h2 style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 24, fontSize: '1rem' }}>
+              Generating your video...
+            </h2>
             <JobProgress initialJob={job} />
           </div>
         )}

@@ -37,7 +37,7 @@ export async function startRunwayClip(imageUrl: string): Promise<string> {
 
 export async function checkRunwayClip(
   taskId: string
-): Promise<{ status: string; outputUrl?: string }> {
+): Promise<{ status: string; outputUrl?: string; failureReason?: string }> {
   const res = await fetch(`${BASE}/tasks/${taskId}`, { headers: headers() })
 
   if (!res.ok) {
@@ -49,5 +49,6 @@ export async function checkRunwayClip(
   return {
     status: data.status as string, // QUEUED | RUNNING | SUCCEEDED | FAILED
     outputUrl: data.output?.[0] as string | undefined,
+    failureReason: (data.failure ?? data.failureCode) as string | undefined,
   }
 }
