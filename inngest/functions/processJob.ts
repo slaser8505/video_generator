@@ -34,6 +34,7 @@ async function callFfmpegWorker(payload: AssembleRequest): Promise<string> {
       'x-worker-secret': process.env.FFMPEG_WORKER_SECRET ?? '',
     },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10 * 60 * 1000), // 10 minute timeout
   })
 
   if (!res.ok) {
