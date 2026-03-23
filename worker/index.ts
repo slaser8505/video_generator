@@ -1,6 +1,17 @@
 import express from 'express'
 import { assembleVideo } from './assembler'
-import type { AssembleRequest } from '../types'
+
+interface AssembleRequest {
+  jobId: string
+  clips: string[]
+  voiceoverUrl: string
+  musicUrl: string | null
+  logoUrl: string | null
+  aiTwinUrl: string | null
+  vesselLocation: string | null
+  fullName: string
+  companyName: string | null
+}
 
 const app = express()
 app.use(express.json({ limit: '10mb' }))

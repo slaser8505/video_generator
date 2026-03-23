@@ -181,7 +181,7 @@ function runFfmpeg(configure: (cmd: ffmpeg.FfmpegCommand) => ffmpeg.FfmpegComman
     const cmd = ffmpeg()
     configure(cmd)
       .on('error', reject)
-      .on('end', resolve)
+      .on('end', () => resolve())
       .run()
   })
 }
