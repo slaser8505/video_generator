@@ -1,11 +1,8 @@
 import ffmpeg from 'fluent-ffmpeg'
-import ffmpegStatic from 'ffmpeg-static'
 import fs from 'fs'
 import path from 'path'
 import { createClient } from '@supabase/supabase-js'
 import { downloadFile } from './utils'
-
-if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic)
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
